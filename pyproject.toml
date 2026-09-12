@@ -7,11 +7,9 @@ authors = [
     { name = "Your Name", email = "dhanishsoni1@gmail.com" }
 ]
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "langchain-text-splitters>=1.1.2",
+]
 
-[project.scripts]
-logistics-sla-copilot = "logistics_sla_copilot:main"
-
-[build-system]
-requires = ["uv_build>=0.12.10,<0.13.0"]
-build-backend = "uv_build"
+[tool.uv]
+package = false
