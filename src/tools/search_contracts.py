@@ -10,7 +10,7 @@ emb_model = HuggingFaceEmbeddings(model_name = "all-MiniLM-L6-v2")
 vector_db = Chroma(persist_directory = str(VECTOR_DIR), embedding_function = emb_model)
 
 @tool
-def ragsearch(query: str, vendor_name: str) -> str:
+def search_contracts(query: str, vendor_name: str) -> str:
     """
     Search the vendor's legal Master Service Agreement (MSA) for Service Level Agreements (SLAs), 
     grace periods, and financial penalty clauses.
