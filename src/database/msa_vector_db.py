@@ -1,9 +1,13 @@
 import shutil
+import os
 
 from pathlib import Path
+from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
+
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "true"
 
 BASE_DIR =  Path(__file__).resolve().parent.parent.parent
 MSA_DIR = Path(BASE_DIR) / "data" / "contracts"
@@ -14,7 +18,6 @@ def build_vector_databse():
 
     # Loading MSA files
     all_documents = []
-    all_metadatas = []
 
     if not MSA_DIR.exists():
         print(f"Error: Contract directory not found at {MSA_DIR}")
@@ -24,8 +27,15 @@ def build_vector_databse():
         print(f"Processing contract: {file.name}")
         raw_text = file.read_text(encoding = 'utf-8')
         vendor = file.stem.split('_')[0]
-        all_documents.append(raw_text)
-        all_metadatas.append({"vendor": vendor, "source": file.name})
+
+        doc = Document(
+            page_content = raw_text,
+            metadata = {
+                "source" : file.name,
+                "vendor" : vendor
+            }
+        )
+        all_documents.append(doc)
 
     # Using RecursiveCharacterTextSplitter to split the text with overlaps
     text_splitter = RecursiveCharacterTextSplitter(
@@ -34,7 +44,7 @@ def build_vector_databse():
     )
 
     # Chunking
-    chunks = text_splitter.create_documents(texts = all_documents, metadatas = all_metadatas)
+    chunks = text_splitter.split_documents(all_documents)
     print(f"Split {len(all_documents)} documents into {len(chunks)} chunks.")
 
     # Importing Embedding
