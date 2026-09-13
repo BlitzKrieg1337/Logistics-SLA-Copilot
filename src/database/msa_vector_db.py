@@ -16,6 +16,10 @@ def build_vector_databse():
     all_documents = []
     all_metadatas = []
 
+    if not MSA_DIR.exists():
+        print(f"Error: Contract directory not found at {MSA_DIR}")
+        return
+
     for file in MSA_DIR.glob('*.md'):
         print(f"Processing contract: {file.name}")
         raw_text = file.read_text(encoding = 'utf-8')
@@ -24,13 +28,13 @@ def build_vector_databse():
         all_metadatas.append({"vendor": vendor, "source": file.name})
 
     # Using RecursiveCharacterTextSplitter to split the text with overlaps
-    text_spltter = RecursiveCharacterTextSplitter(
+    text_splitter = RecursiveCharacterTextSplitter(
         chunk_size = 500,
         chunk_overlap = 50,
     )
 
     # Chunking
-    chunks = text_spltter.create_documents(texts = all_documents, metadatas = all_metadatas)
+    chunks = text_splitter.create_documents(texts = all_documents, metadatas = all_metadatas)
     print(f"Split {len(all_documents)} documents into {len(chunks)} chunks.")
 
     # Importing Embedding
