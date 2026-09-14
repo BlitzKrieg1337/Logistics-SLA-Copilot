@@ -3,16 +3,15 @@ import os
 
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-DB_PATH = os.path.join(BASE_DIR, "data", "supply_chain.db")
-# print(f' DIRECTORY -> {BASE_DIR}')
-# print(f' DIRECTORY -> {DB_PATH}')
+
+DB_DIR = Path(Path(__file__).resolve().parents[2]) / "data" / "supply_chain.db"
+
 
 def seed_database():
-    print(f"INITIALIZING DATABASE AT -> {DB_PATH}")
+    print(f"INITIALIZING DATABASE AT -> {DB_DIR}")
 
     # Creating connection
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_DIR)
     cursor = conn.cursor()
 
     # ENABLE FOREIGN KEY
@@ -71,7 +70,9 @@ def seed_database():
         (1099, 4, "2026-09-08", None, "LATE", None),
         
         # Penalty already applied (Siemens)
-        (1015, 2, "2026-08-20", "2026-08-25", "DELIVERED", 420000.0)
+        (1015, 2, "2026-08-20", "2026-08-25", "DELIVERED", 420000.0),
+
+        (1, 2, "2026-08-20", "2026-08-25", "DELIVERED", None)
     ]
 
     cursor.executemany("""
