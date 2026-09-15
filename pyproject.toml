@@ -11,6 +11,7 @@ dependencies = [
     "langchain-chroma>=1.1.0",
     "langchain-huggingface>=1.2.2",
     "langchain-openai>=1.6.2",
+    "langchain-pinecone>=0.2.13",
     "langchain-text-splitters>=1.1.2",
     "langgraph>=1.2.11",
     "python-dotenv>=1.2.3",
