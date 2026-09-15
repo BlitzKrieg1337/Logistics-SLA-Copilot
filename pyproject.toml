@@ -13,6 +13,7 @@ dependencies = [
     "langchain-text-splitters>=1.1.2",
     "llama-index>=0.14.24",
     "sentence-transformers>=6.0.1",
+    "tavily-python>=0.8.3",
 ]
 
 [tool.uv]

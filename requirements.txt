@@ -2,3 +2,4 @@ langchain_text_splitters
 langchain_chroma
 langchain_huggingface
 sentence-transformers
+tavily-python
