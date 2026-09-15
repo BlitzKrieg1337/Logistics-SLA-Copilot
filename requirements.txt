@@ -3,3 +3,6 @@ langchain_chroma
 langchain_huggingface
 sentence-transformers
 tavily-python
+langgraph
+langchain-openai
+python-dotenv

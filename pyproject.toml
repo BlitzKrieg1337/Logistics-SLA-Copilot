@@ -10,8 +10,10 @@ requires-python = ">=3.13"
 dependencies = [
     "langchain-chroma>=1.1.0",
     "langchain-huggingface>=1.2.2",
+    "langchain-openai>=1.6.2",
     "langchain-text-splitters>=1.1.2",
-    "llama-index>=0.14.24",
+    "langgraph>=1.2.11",
+    "python-dotenv>=1.2.3",
     "sentence-transformers>=6.0.1",
     "tavily-python>=0.8.3",
 ]
