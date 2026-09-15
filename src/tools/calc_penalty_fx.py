@@ -2,7 +2,7 @@ import requests
 
 from langchain_core.tools import tool
 
-# @tool
+@tool
 def calc_penalty_fx(base: str, daily_rate: float, grace_period: int, delay_days: int) -> str:
     """
     Calculates the penalty (days past grace period × daily rate) and converts
@@ -29,6 +29,6 @@ def calc_penalty_fx(base: str, daily_rate: float, grace_period: int, delay_days:
         return f"Exception -> {e}"
 
 
-if __name__ == "__main__":
-    #Test
-    print(calc_penalty_fx("GBP", 100, 0, 3))
+# if __name__ == "__main__":
+#     #Test
+#     print(calc_penalty_fx("GBP", 100, 5, 3))
