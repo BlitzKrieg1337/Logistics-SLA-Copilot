@@ -12,7 +12,7 @@ def post_penalty_to_ledger(order_id: int, penalty_applied_inr: float) -> str:
     
     Args:
         order_id: The integer ID of the order.
-        penalty_amount_inr: The final calculated penalty amount in INR.
+        penalty_applied_inr: The final calculated penalty amount in INR.
     """
 
     try:

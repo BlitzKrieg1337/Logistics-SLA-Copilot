@@ -14,7 +14,6 @@ def calc_penalty_fx(base: str, amount: float) -> str:
     Rules:
         - ONLY use this tool if the penalty is calculated in a foreign currency.
         - DO NOT use this tool if the contract penalty is already stated in INR.
-        - The conversion rate multiplier as a string, or an error message.
     """
 
     if base.upper() == "INR":

@@ -10,22 +10,22 @@ DB_DIR = Path(Path(__file__).resolve().parents[2]) / "data" / "supply_chain.db"
 @tool
 def query_sql_analytics(sql_query: str) -> str:
     """
-        Executes a SELECT query against the supply chain SQLite database.
-        
-        Use this tool to find order statuses, expected/actual delivery dates, 
-        and to map order IDs to vendor names for contract lookups.
+    Executes a SELECT query against the supply chain SQLite database.
+    
+    Use this tool to find order statuses, expected/actual delivery dates, 
+    and to map order IDs to vendor names for contract lookups.
 
-        Database Schema:
-        - vendors (vendor_id INT, vendor_name TEXT, contact_email TEXT)
-        - orders (order_id INT, vendor_id INT, expected_date DATE, actual_date DATE, status TEXT, penalty_applied_inr REAL)
-        
-        Relationships:
-        - orders.vendor_id = vendors.vendor_id
-        
-        Rules:
-        - ONLY output valid SQLite SELECT queries.
-        - DO NOT include formatting like ```sql in the input.
-        """
+    Database Schema:
+    - vendors (vendor_id INT, vendor_name TEXT, contact_email TEXT)
+    - orders (order_id INT, vendor_id INT, expected_date DATE, actual_date DATE, status TEXT, penalty_applied_inr REAL)
+    
+    Relationships:
+    - orders.vendor_id = vendors.vendor_id
+    
+    Rules:
+    - ONLY output valid SQLite SELECT queries.
+    - DO NOT include formatting like ```sql in the input.
+    """
 
     sql = sql_query.strip()
 

@@ -23,11 +23,9 @@ def check_force_majeure(search_query: str) -> str:
           "Taiwan earthquake semiconductor supply", "Red Sea shipping war disruption").
         - EXCLUDE minor localized events, routine weather delays, or brief 1-day labor disputes.
         
-    Post-Retrieval Reasoning Directive for LLM:
-        - Once results are returned, evaluate whether the reported event geographically 
-          and temporally aligns with the vendor's delay.
-        - Determine if the event qualifies as an unforeseeable Act of God / Force Majeure, 
-          or if standard SLA breach penalties still apply.
+    Post-Retrieval Directive:
+        - Present the geographical and temporal timeline of the retrieved events to the user 
+          so they can manually adjudicate the Force Majeure claim.
     """
 
     try:
