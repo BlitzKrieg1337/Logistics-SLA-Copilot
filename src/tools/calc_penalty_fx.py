@@ -29,6 +29,7 @@ def calc_penalty_fx(base: str, daily_rate: float, grace_period: int, delay_days:
         return f"Exception -> {e}"
 
 
-# if __name__ == "__main__":
-#     #Test
-#     print(calc_penalty_fx("GBP", 100, 5, 3))
+if __name__ == "__main__":
+    print(
+        calc_penalty_fx.invoke({ "base" : "GBP", "daily_rate" : 100, "grace_period" : 5, "delay_days" : 13})
+    )
