@@ -3,12 +3,14 @@ import os
 from dotenv import load_dotenv
 from pydantic import SecretStr
 from typing import TypedDict, Annotated
-from langchain_core.messages import BaseMessage, SystemMessage, AIMessage
+from langchain_core.messages import BaseMessage, SystemMessage, AIMessage, HumanMessage
 from langgraph.graph.message import add_messages
 from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.checkpoint.memory import MemorySaver
+from langchain_core.runnables import RunnableConfig
 
 # Importing tools
 from src.tools.query_sql_analytics import query_sql_analytics
@@ -19,6 +21,11 @@ from src.tools.post_penalty_to_ledger import post_penalty_to_ledger
 
 load_dotenv()
 
+os.environ["LANGCHAIN_TRACING_V2"] = "true"
+os.environ["LANGCHAIN_PROJECT"] = "logistics-sla-copilot"
+os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGSMITH_API_KEY", "")
+
+
 safe_tools = [query_sql_analytics,search_contracts,check_force_majeure,calc_penalty_fx,]
 sensitive_tools = [post_penalty_to_ledger]
 all_tools = safe_tools + sensitive_tools
@@ -28,29 +35,29 @@ class AgentState(TypedDict):
     messages : Annotated[list[BaseMessage], add_messages]
 
 
-gemini_llm = ChatOpenAI(
-    model = "gemini-3.5-flash",
-    api_key = SecretStr(os.environ.get("GEMINI_API_KEY", "")),
-    base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+gemini_llm = ChatGoogleGenerativeAI(
+    model="gemini-3.6-flash",
+    api_key=SecretStr(os.environ.get("GEMINI_API_KEY", "")),
 )
 
 groq_llm = ChatOpenAI(
-    model = "llama-3.3-70b-versatile",
+    model = "openai/gpt-oss-120b",
     api_key=SecretStr(os.environ.get("GROQ_API_KEY", "")),
     base_url = "https://api.groq.com/openai/v1"
 )
 
 openrouter_llm = ChatOpenAI(
-    model = "meta-llama/llama-3.3-70b-instruct",
+    model = "nvidia/nemotron-3-ultra-550b-a55b:free",
     api_key=SecretStr(os.environ.get("OPENROUTER_API_KEY", "")),
     base_url = "https://openrouter.ai/api/v1"
 )
 
 gemini_with_tools = gemini_llm.bind_tools(all_tools)
-qrok_with_tools = groq_llm.bind_tools(all_tools)
+qroq_with_tools = groq_llm.bind_tools(all_tools)
 openrouter_with_tools = openrouter_llm.bind_tools(all_tools)
 
-llm_with_tools = gemini_with_tools.with_fallbacks([qrok_with_tools, openrouter_with_tools])
+# llm_with_tools = gemini_with_tools.with_fallbacks([qroq_with_tools, openrouter_with_tools])
+llm_with_tools = openrouter_with_tools.with_fallbacks([qroq_with_tools, gemini_with_tools])
 
 
 SYSTEM_PROMPT = """
@@ -145,3 +152,48 @@ builder.add_edge("SENSITIVE_TOOLS", "AGENT")
 memory = MemorySaver()
 
 graph = builder.compile(checkpointer = memory, interrupt_before = ["SENSITIVE_TOOLS"])
+
+
+if __name__ == "__main__":
+    config: RunnableConfig = {"configurable": {"thread_id": "1"}}
+    print("========= Logistics SLA Copilot Active =========")
+    print("Type 'exit' or 'quit' to terminate the session.\n")
+
+    while True:
+        user_input = input("Enter Prompt: ").strip()
+        if user_input.lower() in ["exit", "quit"]:
+            print("Exiting Copilot session. Goodbye!")
+            break
+
+        if not user_input:
+            continue
+
+        # Check if graph is currently interrupted waiting for approval
+        snapshot = builder.compile(checkpointer=memory, interrupt_before=["SENSITIVE_TOOLS"]).get_state(config)
+        
+        if snapshot.next and "SENSITIVE_TOOLS" in snapshot.next:
+            # User is responding to an approval prompt
+            response = graph.invoke(None, config=config)
+        else:
+            # Standard new message
+            response = graph.invoke({"messages": [HumanMessage(content=user_input)]}, config=config)
+
+        # Inspect state after invocation
+        current_state = graph.get_state(config)
+        last_message = response["messages"][-1]
+
+        # If graph paused BEFORE sensitive tools, print approval prompt with tool details
+        if current_state.next and "SENSITIVE_TOOLS" in current_state.next:
+            if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+                tool_call = last_message.tool_calls[0]
+                print(f"\n⚠️  [APPROVAL REQUIRED] Sensitive Action Intercepted:")
+                print(f"    Tool: {tool_call['name']}")
+                print(f"    Arguments: {tool_call['args']}")
+                print("    Type 'Approve' to execute this ledger update, or cancel by giving new instructions.\n")
+        else:
+            # Standard text output printing
+            if isinstance(last_message.content, list):
+                clean_text = next((b["text"] for b in last_message.content if b.get("type") == "text"), "")
+                print(f"\nCopilot Response:\n{clean_text}\n" + "-"*50)
+            else:
+                print(f"\nCopilot Response:\n{last_message.content}\n" + "-"*50)
