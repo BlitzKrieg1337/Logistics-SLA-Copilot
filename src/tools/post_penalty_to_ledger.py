@@ -1,9 +1,10 @@
-import sqlite3
+import os
+import psycopg2
 
 from langchain_core.tools import tool
-from pathlib import Path
+from dotenv import load_dotenv
 
-DB_DIR = Path(Path(__file__).resolve().parents[2]) / "data" / "supply_chain.db"
+load_dotenv()
 
 @tool
 def post_penalty_to_ledger(order_id: int, penalty_applied_inr: float) -> str:
@@ -15,19 +16,28 @@ def post_penalty_to_ledger(order_id: int, penalty_applied_inr: float) -> str:
         penalty_applied_inr: The final calculated penalty amount in INR.
     """
 
+    DB_URL = os.environ.get("UPDATEONLY_DATABASE_URL")
+    if not DB_URL:
+        return "Error: READONLY_DATABASE_URL not found in environment variables."
+
+    conn = None
+
     try:
-        conn = sqlite3.connect(DB_DIR)
-        cursor = conn.cursor()
-        print("loaded db")
-        cursor.execute("UPDATE orders SET penalty_applied_inr = ? WHERE order_id = ?", 
-                       (penalty_applied_inr, order_id))
-        print("Updated")
-        conn.commit()
-        conn.close()
+        conn = psycopg2.connect(DB_URL)
+        conn.set_session(autocommit = True)
+
+        with conn.cursor() as cursor:
+            cursor.execute("UPDATE orders SET penalty_applied_inr = ? WHERE order_id = ?", 
+                            (penalty_applied_inr, order_id))
+            
         return "Added penalty in DB."
         
     except Exception as e:
         return f"Unable to update the DB -> {e}"
 
-# if __name__ == "__main__":
-#     post_penalty_to_ledger(1, 6000)
+    finally:
+        if conn is not None:
+            conn.close()
+
+if __name__ == "__main__":
+    print(post_penalty_to_ledger.invoke({"order_id" : 1, "penalty_applied_inr" : 6000}))
