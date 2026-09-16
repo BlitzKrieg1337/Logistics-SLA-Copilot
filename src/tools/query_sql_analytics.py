@@ -25,6 +25,7 @@ def query_sql_analytics(sql_query: str) -> str:
     - ONLY output valid PostgreSQL SELECT queries.
     - ALWAYS append LIMIT 15 to your queries unless using aggregations like COUNT().
     - DO NOT include formatting like ```sql in the input.
+    - Order are one of the following only - DELIVERED_ON_TIME, IN_TRANSIT, DELIVERED_LATE
     """
 
     sql= sql_query.strip()
