@@ -9,7 +9,7 @@ load_dotenv()
 @tool
 def post_penalty_to_ledger(order_id: int, penalty_applied_inr: float) -> str:
     """
-    Updates the active_orders database to officially apply a financial penalty.
+    Updates the active_orders database to officially apply a financial penalty in INR.
     
     Args:
         order_id: The integer ID of the order.
@@ -18,19 +18,32 @@ def post_penalty_to_ledger(order_id: int, penalty_applied_inr: float) -> str:
 
     DB_URL = os.environ.get("UPDATEONLY_DATABASE_URL")
     if not DB_URL:
-        return "Error: READONLY_DATABASE_URL not found in environment variables."
+        return "Error: UPDATEONLY_DATABASE_URL not found in environment variables."
 
     conn = None
 
     try:
         conn = psycopg2.connect(DB_URL)
-        conn.set_session(autocommit = True)
+        conn.set_session(autocommit=True)
 
         with conn.cursor() as cursor:
-            cursor.execute("UPDATE orders SET penalty_applied_inr = ? WHERE order_id = ?", 
-                            (penalty_applied_inr, order_id))
+
+            cursor.execute(
+                """
+                UPDATE orders 
+                SET penalty_applied_inr = %s 
+                WHERE order_id = %s 
+                RETURNING order_id, penalty_applied_inr;
+                """, 
+                (penalty_applied_inr, order_id)
+            )
             
-        return "Added penalty in DB."
+            updated_row = cursor.fetchone()
+            
+            if not updated_row:
+                return f"Error: Order ID {order_id} was not found in database. No rows updated."
+                
+        return f"Success: Order {order_id} penalty set to ₹{penalty_applied_inr:,.2f} in database."
         
     except Exception as e:
         return f"Unable to update the DB -> {e}"
@@ -40,4 +53,4 @@ def post_penalty_to_ledger(order_id: int, penalty_applied_inr: float) -> str:
             conn.close()
 
 if __name__ == "__main__":
-    print(post_penalty_to_ledger.invoke({"order_id" : 1, "penalty_applied_inr" : 6000}))
+    print(post_penalty_to_ledger.invoke({"order_id": 1, "penalty_applied_inr": 6000.0}))
