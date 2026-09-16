@@ -1,58 +1,70 @@
-import sqlite3
+import os
+import psycopg2
 
+from dotenv import load_dotenv
 from langchain_core.tools import tool
-from pathlib import Path
 
-
-DB_DIR = Path(Path(__file__).resolve().parents[2]) / "data" / "supply_chain.db"
-
+load_dotenv()
 
 @tool
 def query_sql_analytics(sql_query: str) -> str:
     """
-    Executes a SELECT query against the supply chain SQLite database.
+    Executes a read-only SELECT query against the Neon PostgreSQL logistics database.
     
     Use this tool to find order statuses, expected/actual delivery dates, 
     and to map order IDs to vendor names for contract lookups.
 
     Database Schema:
-    - vendors (vendor_id INT, vendor_name TEXT, contact_email TEXT)
-    - orders (order_id INT, vendor_id INT, expected_date DATE, actual_date DATE, status TEXT, penalty_applied_inr REAL)
+    - vendors (vendor_id SERIAL, vendor_name VARCHAR(100), contact_email VARCHAR(100))
+    - orders (order_id SERIAL, vendor_id INTEGER, expected_date DATE, actual_date DATE, status VARCHAR(50), penalty_applied_inr NUMERIC(12, 2))
     
     Relationships:
     - orders.vendor_id = vendors.vendor_id
     
     Rules:
-    - ONLY output valid SQLite SELECT queries.
+    - ONLY output valid PostgreSQL SELECT queries.
+    - ALWAYS append LIMIT 15 to your queries unless using aggregations like COUNT().
     - DO NOT include formatting like ```sql in the input.
     """
 
-    sql = sql_query.strip()
-
+    sql= sql_query.strip()
     if not sql.upper().startswith("SELECT"):
         return "Error: Read-only tool. Only SELECT queries are allowed."
+
+    DB_URL = os.environ.get("READONLY_DATABASE_URL")
+    if not DB_URL:
+        return "Error: READONLY_DATABASE_URL not found in environment variables."
+
+    conn = None
     
     try:
-        conn = sqlite3.connect(DB_DIR)
-        cursor = conn.cursor()
-        cursor.execute(sql)
-        rows = cursor.fetchall()
-        columns = [ description[0] for description in cursor.description]
-        conn.close()
+        conn = psycopg2.connect(DB_URL)
+        conn.set_session(readonly = True, autocommit = True)
 
-        if not rows:
-            return "Query executed successfully, but returned no results."
+        with conn.cursor() as cursor:
+            cursor.execute(sql)
+            rows = cursor.fetchmany(15)
+            columns = [description[0] for description in cursor.description] if cursor.description else []
 
-        result_str = f"Columns : {columns}\nData \t: "
-        for row in rows:
-            result_str += f"{row}\n"
+            if not rows:
+                return "Query executed successfully, but returned no results."
 
-        return result_str
+            result_str = f"{columns}\n "
+            for row in rows:
+                result_str += f"{row}\n"
+
+            return result_str
 
     except Exception as e:
         return f"SQL Error -> {e}"
 
+    finally:
+        if conn is not None:
+            conn.close()
 
 
-# if __name__ == "__main__":
-#     print(query_sql_analytics('select* from orders'))
+
+if __name__ == "__main__":
+    print(query_sql_analytics.invoke({
+        "sql_query": "SELECT * FROM orders LIMIT 5"
+    }))
