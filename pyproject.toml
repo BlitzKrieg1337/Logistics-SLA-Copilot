@@ -8,6 +8,7 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
+    "fastapi>=0.141.1",
     "ir>=0.1.32",
     "langchain-chroma>=1.1.0",
     "langchain-google-genai>=4.4.0",

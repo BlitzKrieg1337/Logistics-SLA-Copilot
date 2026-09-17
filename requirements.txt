@@ -6,3 +6,4 @@ python-dotenv
 langchain_pinecone
 psycopg2
 langchain-google-genai
+fastapi
