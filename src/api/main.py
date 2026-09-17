@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from typing import Any,List
 from langchain_core.runnables import RunnableConfig
@@ -8,6 +9,14 @@ from src.api.schemas import ChatRequest, ChatResponse, MessageSchma, ApproveRequ
 
 
 app = FastAPI(title = "Logistics SLA Copilot API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 def format_messages(raw_messages: List[Any]) -> List[MessageSchma]:
 
@@ -25,7 +34,7 @@ def format_messages(raw_messages: List[Any]) -> List[MessageSchma]:
 @app.get("/test")
 def testing():
     if graph:
-        return "TEST SUCCESS! Graph Imported"
+        return "SUCCESS!"
 
 
 @app.post("/chat")
