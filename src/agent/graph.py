@@ -3,12 +3,12 @@ import os
 from dotenv import load_dotenv
 from pydantic import SecretStr
 from typing import TypedDict, Annotated
-from langchain_core.messages import BaseMessage, SystemMessage, AIMessage, HumanMessage
+from langchain_core.messages import BaseMessage, SystemMessage, AIMessage, HumanMessage, ToolMessage
 from langgraph.graph.message import add_messages
 from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import StateGraph, START, END
-from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.prebuilt import ToolNode
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.runnables import RunnableConfig
 
@@ -117,18 +117,40 @@ This tool creates a permanent financial record. You must adhere strictly to thes
 """
 
 def custom_tools_condition(state: AgentState):
-    """Routes the LLM to either the safe tools, sensitive tools, or END."""
+    """Routes to safe tools, sensitive tools, a mixed-call correction, or END."""
     last_message = state["messages"][-1]
 
     if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
         return END
-        
-    sensitive_tool_names = [t.name for t in sensitive_tools]
-    for tool_call in last_message.tool_calls:
-        if tool_call["name"] in sensitive_tool_names:
-            return "SENSITIVE_TOOLS"
-            
+
+    sensitive_tool_names = {t.name for t in sensitive_tools}
+    called_names = {tc["name"] for tc in last_message.tool_calls}
+
+    has_sensitive = bool(called_names & sensitive_tool_names)
+    has_safe = bool(called_names - sensitive_tool_names)
+
+    if has_sensitive and has_safe:
+        return "MIXED_CALL_ERROR"
+    if has_sensitive:
+        return "SENSITIVE_TOOLS"
     return "SAFE_TOOLS"
+
+def mixed_call_error_node(state: AgentState):
+    """Answers every tool call with an error instead of executing anything,
+    forcing the model to retry with one category of tool call per turn."""
+    last_message = state["messages"][-1]
+
+    if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
+        return {"messages": []}
+
+    error_messages = [
+        ToolMessage(
+            content="Error: cannot mix the ledger tool with other tool calls in the same turn. Reissue these as separate turns.",
+            tool_call_id=tc["id"],
+        )
+        for tc in last_message.tool_calls
+    ]
+    return {"messages": error_messages}
 
 
 def agent_node(state: AgentState):
@@ -142,12 +164,23 @@ builder = StateGraph(AgentState)
 builder.add_node("AGENT", agent_node)
 builder.add_node("SAFE_TOOLS", ToolNode(safe_tools))
 builder.add_node("SENSITIVE_TOOLS", ToolNode(sensitive_tools))
+builder.add_node("MIXED_CALL_ERROR", mixed_call_error_node)
 
 
 builder.add_edge(START, "AGENT")
-builder.add_conditional_edges("AGENT", custom_tools_condition, {"SAFE_TOOLS" : "SAFE_TOOLS", "SENSITIVE_TOOLS" : "SENSITIVE_TOOLS", END : END})
+builder.add_conditional_edges(
+    "AGENT",
+    custom_tools_condition,
+    {
+        "SAFE_TOOLS": "SAFE_TOOLS",
+        "SENSITIVE_TOOLS": "SENSITIVE_TOOLS",
+        "MIXED_CALL_ERROR": "MIXED_CALL_ERROR",
+        END: END,
+    },
+)
 builder.add_edge("SAFE_TOOLS", "AGENT")
 builder.add_edge("SENSITIVE_TOOLS", "AGENT")
+builder.add_edge("MIXED_CALL_ERROR", "AGENT")
 
 memory = MemorySaver()
 
