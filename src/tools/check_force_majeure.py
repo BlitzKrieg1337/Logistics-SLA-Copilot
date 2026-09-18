@@ -1,8 +1,12 @@
 import os
+from pathlib import Path
 
+from dotenv import load_dotenv
 from langchain_core.tools import tool
 from tavily import TavilyClient
 
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+load_dotenv(BASE_DIR / ".env")
 
 tavily_client = TavilyClient(os.environ.get("TAVILY_API_KEY"))
 
