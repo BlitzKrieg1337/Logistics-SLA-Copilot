@@ -87,14 +87,21 @@ def handle_approval(payload : ApproveRequest) -> ChatResponse:
 
         elif payload.action.lower() == "reject":
             last_message = state.values["messages"][-1]
-            tool_call_id = last_message.tool_call_id[0]["id"] if hasattr(last_message, "tool_calls" and last_message.tool_call_id) else "cancelled"
+
+            if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="No pending tool call to reject.",
+                )
+
+            tool_call_id = last_message.tool_calls[0]["id"]
 
             rejection_message = ToolMessage(
-                content = f"User rejected the penalty application. Reason: {payload.reason or 'User manually declined in UI.'}",
-                tool_call_id = tool_call_id
+                content=f"User rejected the penalty application. Reason: {payload.reason or 'User manually declined in UI.'}",
+                tool_call_id=tool_call_id,
             )
 
-            graph.update_state(config, {"messages" : [rejection_message]}, as_node = "post_penalty_to_ledger")
+            graph.update_state(config, {"messages": [rejection_message]}, as_node="SENSITIVE_TOOLS")
             graph.invoke(None, config)
 
         else:
