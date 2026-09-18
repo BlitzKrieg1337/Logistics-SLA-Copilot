@@ -18,9 +18,6 @@ api_key = os.getenv("PINECONE_API_KEY")
 if not api_key:
     raise ValueError("PINECONE_API_KEY is missing from your .env file")
 
-pc = Pinecone(api_key=api_key)
-index = pc.Index(INDEX_NAME)
-
 
 @tool
 def search_contracts(query: str, vendor_name: str) -> str:
@@ -29,6 +26,10 @@ def search_contracts(query: str, vendor_name: str) -> str:
     Service Level Agreements (SLAs), grace periods, and financial
     penalty clauses.
     """
+
+    pc = Pinecone(api_key=api_key)
+    index = pc.Index(INDEX_NAME)
+
 
     try:
         search_query = SearchQuery(
