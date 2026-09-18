@@ -1,5 +1,8 @@
 # Logistics SLA Copilot
 
+🚀 **Live App:** [logistics-sla-copilot.vercel.app](https://logistics-sla-copilot.vercel.app)  
+⚡ **API Health:** [logistics-sla-copilot.onrender.com/test](https://logistics-sla-copilot.onrender.com/test)
+
 An AI-assisted operations copilot for investigating delivery delays, retrieving vendor SLA terms, calculating late-delivery penalties, researching possible Force Majeure events, and requesting human approval before a penalty is written to the ledger.
 
 Built as a portfolio project to demonstrate agent orchestration, retrieval-augmented generation (RAG), database RBAC, and human-in-the-loop controls.
