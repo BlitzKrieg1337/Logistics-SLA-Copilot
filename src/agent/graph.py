@@ -21,7 +21,8 @@ from src.tools.post_penalty_to_ledger import post_penalty_to_ledger
 
 load_dotenv()
 
-os.environ["LANGCHAIN_TRACING_V2"] = "true"
+if os.getenv("LANGSMITH_API_KEY"):
+    os.environ["LANGCHAIN_TRACING_V2"] = "true"
 os.environ["LANGCHAIN_PROJECT"] = "logistics-sla-copilot"
 os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGSMITH_API_KEY", "")
 
