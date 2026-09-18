@@ -7,3 +7,4 @@ langchain_pinecone
 psycopg2
 langchain-google-genai
 fastapi
+uvicorn
