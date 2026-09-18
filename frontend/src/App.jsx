@@ -196,9 +196,7 @@ export default function App() {
                     <div className="h-2 w-2 rounded-full bg-orange-500 animate-pulse" />
                     <h3 className="text-gray-100 font-medium text-sm">Action Approval Required</h3>
                   </div>
-                  <div className="bg-[#0a0a0a] rounded-xl p-4 border border-gray-800 font-mono text-xs text-gray-300 overflow-x-auto mb-5">
-                    <pre>{JSON.stringify(pendingAction.args || pendingAction, null, 2)}</pre>
-                  </div>
+                  
                   <div className="flex flex-col sm:flex-row gap-3">
                     <button
                       onClick={() => handleApproval('approve')}
