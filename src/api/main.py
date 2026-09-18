@@ -14,9 +14,11 @@ from src.api.schemas import ChatRequest, ChatResponse, MessageSchma, ApproveRequ
 app = FastAPI(title = "Logistics SLA Copilot API")
 logger = logging.getLogger(__name__)
 
-origins = os.environ.get(
+raw_origins = os.environ.get(
     "CORS_ORIGINS", "http://localhost:5173,http://localhost:3000"
 ).split(",")
+
+origins = [o.strip().rstrip("/") for o in raw_origins if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
