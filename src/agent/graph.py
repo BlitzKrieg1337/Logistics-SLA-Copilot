@@ -11,6 +11,8 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.postgres import PostgresSaver
+from psycopg_pool import ConnectionPool
 
 # Importing tools
 from src.tools.query_sql_analytics import query_sql_analytics
@@ -183,7 +185,20 @@ builder.add_edge("SAFE_TOOLS", "AGENT")
 builder.add_edge("SENSITIVE_TOOLS", "AGENT")
 builder.add_edge("MIXED_CALL_ERROR", "AGENT")
 
-memory = MemorySaver()
+db_url = os.environ.get("DATABASE_URL")
+if not db_url:
+    raise ValueError("DATABASE_URL environment variable is missing.")
+
+pool = ConnectionPool(
+    conninfo=db_url,
+    kwargs={
+        "autocommit": True,
+        "prepare_threshold": 0,
+    }
+)
+
+memory = PostgresSaver(pool) # type: ignore suppress the generic type mismatch
+memory.setup()
 
 graph = builder.compile(checkpointer = memory, interrupt_before = ["SENSITIVE_TOOLS"])
 
