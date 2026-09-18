@@ -1,4 +1,5 @@
 import os
+import logging
 
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,6 +12,7 @@ from src.api.schemas import ChatRequest, ChatResponse, MessageSchma, ApproveRequ
 
 
 app = FastAPI(title = "Logistics SLA Copilot API")
+logger = logging.getLogger(__name__)
 
 origins = os.environ.get(
     "CORS_ORIGINS", "http://localhost:5173,http://localhost:3000"
@@ -37,6 +39,19 @@ def format_messages(raw_messages: List[Any]) -> List[MessageSchma]:
     return formatted
 
 
+def get_pending_action(state: Any) -> Any:
+    """Returns the interrupted tool call so the UI can recover after refresh."""
+    if not state.next:
+        return None
+
+    messages = state.values.get("messages", [])
+    last_message = messages[-1] if messages else None
+
+    if isinstance(last_message, AIMessage) and last_message.tool_calls:
+        return last_message.tool_calls[0]
+
+    return None
+
 @app.get("/test")
 def testing():
     if graph:
@@ -53,12 +68,7 @@ def chat_endpoint(payload: ChatRequest) -> ChatResponse:
         state = graph.get_state(config)
 
         is_paused = bool(state.next)
-        pending_action = None
-
-        if is_paused:
-            last_message = state.values["messages"][-1]
-            if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-                pending_action = last_message.tool_calls[0]
+        pending_action = get_pending_action(state)
 
         formatted_history = format_messages(state.values.get("messages", []))
 
@@ -69,10 +79,11 @@ def chat_endpoint(payload: ChatRequest) -> ChatResponse:
             pending_action = pending_action, 
         )
 
-    except Exception as e:
+    except Exception:
+        logger.exception("Agent execution failed in /chat")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Agent execution error: {str(e)}",
+            detail="The assistant could not complete that request. Please try again.",
         )
 
 @app.post("/action")
@@ -126,10 +137,11 @@ def handle_approval(payload : ApproveRequest) -> ChatResponse:
             pending_action = None
         )
 
-    except Exception as e:
+    except Exception:
+        logger.exception("Agent execution failed in /action")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Agent execution error: {str(e)}",
+            detail="The requested action could not be completed. Please try again.",
         )
 
 @app.get("/history/{thread_id}")
@@ -145,6 +157,6 @@ def get_history(thread_id : str) -> ChatResponse:
     return ChatResponse(
         thread_id = thread_id,
         messages = formatted_history,
-        is_paused = bool(state.next)
+        is_paused = bool(state.next),
+        pending_action = get_pending_action(state),
     )
-    
