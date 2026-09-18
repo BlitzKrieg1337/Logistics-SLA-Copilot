@@ -26,16 +26,65 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def format_messages(raw_messages: List[Any]) -> List[MessageSchma]:
 
+def format_messages(raw_messages: List[Any]) -> List[MessageSchma]:
     formatted = []
     for msg in raw_messages:
         if isinstance(msg, HumanMessage):
-            formatted.append(MessageSchma(role = "user", content = str(msg.content)))
+            # Same parsing logic for HumanMessage just in case
+            if isinstance(msg.content, list):
+                content = "".join(b.get("text", "") if isinstance(b, dict) else str(b) for b in msg.content)
+            else:
+                content = str(msg.content) if msg.content else ""
+            formatted.append(MessageSchma(role="user", content=content))
+            
         elif isinstance(msg, AIMessage):
-            formatted.append(MessageSchma(role = "assistant", content = str(msg.content)))
+            # FIX: Safely parse text out of content blocks if it's a list
+            if isinstance(msg.content, list):
+                content = "".join(b.get("text", "") if isinstance(b, dict) else str(b) for b in msg.content)
+            else:
+                content = str(msg.content) if msg.content else ""
+            
+            # Inject the Markdown Table summary
+            if hasattr(msg, "tool_calls") and msg.tool_calls:
+                for tc in msg.tool_calls:
+                    if tc["name"] == "post_penalty_to_ledger":
+                        args = tc.get("args", {})
+                        
+                        try:
+                            penalty_str = f"₹{float(args.get('penalty_applied_inr', 0)):,.2f}"
+                        except (ValueError, TypeError):
+                            penalty_str = f"₹{args.get('penalty_applied_inr', 0)}"
+                            
+                        summary = (
+                            f"\n\n---\n"
+                            f"### 🛑 Ledger Update Request\n"
+                            f"| Field | Details |\n"
+                            f"| :--- | :--- |\n"
+                            f"| **Action** | Post Penalty to Database Ledger |\n"
+                            f"| **Order ID** | `{args.get('order_id', 'Unknown')}` |\n"
+                            f"| **Vendor** | {args.get('vendor_name', 'Unknown')} |\n"
+                            f"| **Expected Date** | {args.get('expected_date', 'Unknown')} |\n"
+                            f"| **Actual Date** | {args.get('actual_date', 'Unknown')} |\n"
+                            f"| **Delay** | {args.get('delay_days', 'Unknown')} days |\n"
+                            f"| **Amount** | **{penalty_str}** |\n"
+                            f"---\n"
+                        )
+                        
+                        if "Ledger Update Request" not in content:
+                            content += summary
+                            
+            if content.strip():
+                formatted.append(MessageSchma(role="assistant", content=content.strip()))
+                
         elif isinstance(msg, ToolMessage):
-            formatted.append(MessageSchma(role = "tool", content = str(msg.content)))
+            content = str(msg.content)
+            
+            if "User rejected" in content:
+                formatted.append(MessageSchma(role="user", content="Action: **Rejected** ❌"))
+            elif "Success: Order" in content or "Error:" in content:
+                formatted.append(MessageSchma(role="user", content="Action: **Approved** ✅"))
+                
     return formatted
 
 
@@ -103,23 +152,27 @@ def handle_approval(payload : ApproveRequest) -> ChatResponse:
             graph.invoke(None, config)
 
         elif payload.action.lower() == "reject":
-            last_message = state.values["messages"][-1]
+                    last_message = state.values["messages"][-1]
 
-            if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="No pending tool call to reject.",
-                )
+                    if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="No pending tool call to reject.",
+                        )
 
-            tool_call_id = last_message.tool_calls[0]["id"]
+                    tool_call_id = last_message.tool_calls[0]["id"]
 
-            rejection_message = ToolMessage(
-                content=f"User rejected the penalty application. Reason: {payload.reason or 'User manually declined in UI.'}",
-                tool_call_id=tool_call_id,
-            )
+                    # FIX: Added a CRITICAL DIRECTIVE to stop the LLM from trying again
+                    rejection_message = ToolMessage(
+                        content=(
+                            f"User rejected the penalty application. Reason: {payload.reason or 'User manually declined in UI.'} "
+                            f"\nCRITICAL SYSTEM DIRECTIVE: DO NOT retry this tool call. Acknowledge the cancellation gracefully and ask the user what to do next."
+                        ),
+                        tool_call_id=tool_call_id,
+                    )
 
-            graph.update_state(config, {"messages": [rejection_message]}, as_node="SENSITIVE_TOOLS")
-            graph.invoke(None, config)
+                    graph.update_state(config, {"messages": [rejection_message]}, as_node="SENSITIVE_TOOLS")
+                    graph.invoke(None, config)
 
         else:
             raise HTTPException(
