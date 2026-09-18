@@ -1,4 +1,5 @@
 import os
+import re
 import psycopg2
 
 from dotenv import load_dotenv
@@ -6,41 +7,66 @@ from langchain_core.tools import tool
 
 load_dotenv()
 
+_FORBIDDEN_KEYWORDS = re.compile(
+    r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|GRANT|REVOKE|CREATE|EXEC|EXECUTE|COPY|CALL|MERGE)\b",
+    re.IGNORECASE,
+)
+
+
+def _reject_reason(sql_query: str) -> str | None:
+    """Returns a rejection message if the query fails validation, else None."""
+    stripped = sql_query.strip().rstrip(";")
+
+    if ";" in stripped:
+        return "Error: multiple statements in one query are not allowed."
+
+    upper = stripped.upper()
+    if not (upper.startswith("SELECT") or upper.startswith("WITH")):
+        return "Error: Read-only tool. Only SELECT (or WITH ... SELECT) queries are allowed."
+
+    if _FORBIDDEN_KEYWORDS.search(stripped):
+        return "Error: query contains a forbidden keyword."
+
+    return None
+
+
 @tool
 def query_sql_analytics(sql_query: str) -> str:
     """
     Executes a read-only SELECT query against the Neon PostgreSQL logistics database.
-    
-    Use this tool to find order statuses, expected/actual delivery dates, 
+
+    Use this tool to find order statuses, expected/actual delivery dates,
     and to map order IDs to vendor names for contract lookups.
 
     Database Schema:
     - vendors (vendor_id SERIAL, vendor_name VARCHAR(100), contact_email VARCHAR(100))
     - orders (order_id SERIAL, vendor_id INTEGER, expected_date DATE, actual_date DATE, status VARCHAR(50), penalty_applied_inr NUMERIC(12, 2))
-    
+
     Relationships:
     - orders.vendor_id = vendors.vendor_id
-    
+
     Rules:
-    - ONLY output valid PostgreSQL SELECT queries.
+    - ONLY output valid PostgreSQL SELECT (or WITH ... SELECT) queries.
     - ALWAYS append LIMIT 15 to your queries unless using aggregations like COUNT().
     - DO NOT include formatting like ```sql in the input.
-    - Order are one of the following only - DELIVERED_ON_TIME, IN_TRANSIT, DELIVERED_LATE
+    - Orders are one of the following only - DELIVERED_ON_TIME, IN_TRANSIT, DELIVERED_LATE
     """
 
-    sql= sql_query.strip()
-    if not sql.upper().startswith("SELECT"):
-        return "Error: Read-only tool. Only SELECT queries are allowed."
+    reason = _reject_reason(sql_query)
+    if reason:
+        return reason
+
+    sql = sql_query.strip().rstrip(";")
 
     DB_URL = os.environ.get("READONLY_DATABASE_URL")
     if not DB_URL:
         return "Error: READONLY_DATABASE_URL not found in environment variables."
 
     conn = None
-    
+
     try:
         conn = psycopg2.connect(DB_URL)
-        conn.set_session(readonly = True, autocommit = True)
+        conn.set_session(readonly=True, autocommit=True)
 
         with conn.cursor() as cursor:
             cursor.execute(sql)
@@ -64,8 +90,7 @@ def query_sql_analytics(sql_query: str) -> str:
             conn.close()
 
 
-
 if __name__ == "__main__":
     print(query_sql_analytics.invoke({
-        "sql_query": "SELECT * FROM orders LIMIT 5"
+        "sql_query": "UPDATE orders set vendor_id = 123 WHERE order_id = 1"
     }))
