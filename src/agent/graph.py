@@ -38,8 +38,28 @@ class AgentState(TypedDict):
     messages : Annotated[list[BaseMessage], add_messages]
 
 
-gemini_llm = ChatGoogleGenerativeAI(
+gemini_llm1 = ChatGoogleGenerativeAI(
+    model="gemini-3.8-flash",
+    api_key=SecretStr(os.environ.get("GEMINI_API_KEY", "")),
+)
+gemini_llm2= ChatGoogleGenerativeAI(
+    model="gemini-3.7-flash",
+    api_key=SecretStr(os.environ.get("GEMINI_API_KEY", "")),
+)
+gemini_llm3 = ChatGoogleGenerativeAI(
     model="gemini-3.6-flash",
+    api_key=SecretStr(os.environ.get("GEMINI_API_KEY", "")),
+)
+gemini_llm4 = ChatGoogleGenerativeAI(
+    model="gemini-3.5-flash",
+    api_key=SecretStr(os.environ.get("GEMINI_API_KEY", "")),
+)
+gemini_llm5 = ChatGoogleGenerativeAI(
+    model="gemini-3.5-flash-lite",
+    api_key=SecretStr(os.environ.get("GEMINI_API_KEY", "")),
+)
+gemini_llm6 = ChatGoogleGenerativeAI(
+    model="gemini-3.1-flash-lite",
     api_key=SecretStr(os.environ.get("GEMINI_API_KEY", "")),
 )
 
@@ -55,12 +75,25 @@ openrouter_llm = ChatOpenAI(
     base_url = "https://openrouter.ai/api/v1"
 )
 
-gemini_with_tools = gemini_llm.bind_tools(all_tools)
-qroq_with_tools = groq_llm.bind_tools(all_tools)
+gemini1_with_tools = gemini_llm1.bind_tools(all_tools)
+gemini2_with_tools = gemini_llm2.bind_tools(all_tools)
+gemini3_with_tools = gemini_llm3.bind_tools(all_tools)
+gemini4_with_tools = gemini_llm4.bind_tools(all_tools)
+gemini5_with_tools = gemini_llm5.bind_tools(all_tools)
+gemini6_with_tools = gemini_llm6.bind_tools(all_tools)
+
+groq_with_tools = groq_llm.bind_tools(all_tools)
 openrouter_with_tools = openrouter_llm.bind_tools(all_tools)
 
-# llm_with_tools = gemini_with_tools.with_fallbacks([qroq_with_tools, openrouter_with_tools])
-llm_with_tools = openrouter_with_tools.with_fallbacks([qroq_with_tools, gemini_with_tools])
+llm_with_tools = openrouter_with_tools.with_fallbacks(
+    [groq_with_tools, 
+     gemini1_with_tools,
+     gemini2_with_tools,
+     gemini3_with_tools,
+     gemini4_with_tools,
+     gemini5_with_tools,
+     gemini6_with_tools,
+     ])
 
 
 SYSTEM_PROMPT = """
