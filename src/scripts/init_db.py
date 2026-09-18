@@ -1,5 +1,6 @@
 import os
 import psycopg2
+from psycopg2 import sql
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -13,13 +14,13 @@ UPDATE_ROLE = os.environ.get("UPDATE_ROLE")
 UPDATE_PASSWORD = os.environ.get("UPDATE_PASSWORD")
 
 
-def run(cursor, sql, label):
+def run(cursor, query, label):
     """
     Runs one SQL statement at a time and prints whether it worked.
-    This prevents one bad command from failing the entire script silently.
+    Accepts a plain string or a psycopg2.sql.Composed object.
     """
     try:
-        cursor.execute(sql)
+        cursor.execute(query)
         print(f"  OK -> {label}")
     except Exception as e:
         print(f"  FAILED -> {label}: {e}")
@@ -29,6 +30,14 @@ def init_db():
     if not all([DATABASE_URL, READONLY_ROLE, READONLY_PASSWORD, UPDATE_ROLE, UPDATE_PASSWORD]):
         print("Error -> One or more required environment variables are missing!")
         return
+
+    # Narrows str | None -> str for Pylance; redundant at runtime given the check above,
+    # but the all() call above doesn't count as a type guard.
+    assert DATABASE_URL is not None
+    assert READONLY_ROLE is not None
+    assert READONLY_PASSWORD is not None
+    assert UPDATE_ROLE is not None
+    assert UPDATE_PASSWORD is not None
 
     print("Connecting to Neon PostgreSQL as Admin...")
     conn = psycopg2.connect(DATABASE_URL)
@@ -63,44 +72,67 @@ def init_db():
             );
         """, "create orders table")
 
-        # Lock down default public access
         run(cursor, "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC;", "revoke default table access from PUBLIC")
         run(cursor, "ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM PUBLIC;", "revoke default privileges from PUBLIC")
 
         # ---- 2. CREATING ROLES (Safe Idempotent Method) ----
         print("\nCreating security roles...")
-        run(cursor, f"""
+        run(cursor, sql.SQL("""
             DO $$
             BEGIN
-                IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{READONLY_ROLE}') THEN
-                    CREATE ROLE {READONLY_ROLE} WITH LOGIN PASSWORD '{READONLY_PASSWORD}';
+                IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = {role_literal}) THEN
+                    CREATE ROLE {role_ident} WITH LOGIN PASSWORD {password_literal};
                 END IF;
             END
             $$;
-        """, f"ensure {READONLY_ROLE} exists")
+        """).format(
+            role_literal=sql.Literal(READONLY_ROLE),
+            role_ident=sql.Identifier(READONLY_ROLE),
+            password_literal=sql.Literal(READONLY_PASSWORD),
+        ), f"ensure {READONLY_ROLE} exists")
 
-        run(cursor, f"""
+        run(cursor, sql.SQL("""
             DO $$
             BEGIN
-                IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{UPDATE_ROLE}') THEN
-                    CREATE ROLE {UPDATE_ROLE} WITH LOGIN PASSWORD '{UPDATE_PASSWORD}';
+                IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = {role_literal}) THEN
+                    CREATE ROLE {role_ident} WITH LOGIN PASSWORD {password_literal};
                 END IF;
             END
             $$;
-        """, f"ensure {UPDATE_ROLE} exists")
+        """).format(
+            role_literal=sql.Literal(UPDATE_ROLE),
+            role_ident=sql.Identifier(UPDATE_ROLE),
+            password_literal=sql.Literal(UPDATE_PASSWORD),
+        ), f"ensure {UPDATE_ROLE} exists")
 
         # ---- 3. Assigning Permissions ----
         print(f"\nApplying permissions for {READONLY_ROLE}...")
-        run(cursor, f"GRANT CONNECT ON DATABASE {db_name} TO {READONLY_ROLE};", "grant connect")
-        run(cursor, f"GRANT USAGE ON SCHEMA public TO {READONLY_ROLE};", "grant usage")
-        run(cursor, f"GRANT SELECT ON ALL TABLES IN SCHEMA public TO {READONLY_ROLE};", "grant select on existing tables")
-        run(cursor, f"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO {READONLY_ROLE};", "grant select on future tables")
+        run(cursor, sql.SQL("GRANT CONNECT ON DATABASE {} TO {};").format(
+            sql.Identifier(db_name), sql.Identifier(READONLY_ROLE)
+        ), "grant connect")
+        run(cursor, sql.SQL("GRANT USAGE ON SCHEMA public TO {};").format(
+            sql.Identifier(READONLY_ROLE)
+        ), "grant usage")
+        run(cursor, sql.SQL("GRANT SELECT ON ALL TABLES IN SCHEMA public TO {};").format(
+            sql.Identifier(READONLY_ROLE)
+        ), "grant select on existing tables")
+        run(cursor, sql.SQL("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO {};").format(
+            sql.Identifier(READONLY_ROLE)
+        ), "grant select on future tables")
 
         print(f"\nApplying permissions for {UPDATE_ROLE}...")
-        run(cursor, f"GRANT CONNECT ON DATABASE {db_name} TO {UPDATE_ROLE};", "grant connect")
-        run(cursor, f"GRANT USAGE ON SCHEMA public TO {UPDATE_ROLE};", "grant usage")
-        run(cursor, f"GRANT SELECT ON ALL TABLES IN SCHEMA public TO {UPDATE_ROLE};", "grant select on existing tables")
-        run(cursor, f"GRANT UPDATE ON orders TO {UPDATE_ROLE};", "grant update on orders")
+        run(cursor, sql.SQL("GRANT CONNECT ON DATABASE {} TO {};").format(
+            sql.Identifier(db_name), sql.Identifier(UPDATE_ROLE)
+        ), "grant connect")
+        run(cursor, sql.SQL("GRANT USAGE ON SCHEMA public TO {};").format(
+            sql.Identifier(UPDATE_ROLE)
+        ), "grant usage")
+        run(cursor, sql.SQL("GRANT SELECT ON ALL TABLES IN SCHEMA public TO {};").format(
+            sql.Identifier(UPDATE_ROLE)
+        ), "grant select on existing tables")
+        run(cursor, sql.SQL("GRANT UPDATE ON orders TO {};").format(
+            sql.Identifier(UPDATE_ROLE)
+        ), "grant update on orders")
 
         # ---- 4. Verify ----
         print("\nCurrent grants on orders/vendors:")
@@ -111,7 +143,7 @@ def init_db():
               AND grantee IN (%s, %s)
             ORDER BY grantee, table_name, privilege_type;
         """, (READONLY_ROLE, UPDATE_ROLE))
-        
+
         for row in cursor.fetchall():
             print(f"  {row}")
 
