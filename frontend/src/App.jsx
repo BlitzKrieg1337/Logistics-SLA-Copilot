@@ -126,7 +126,7 @@ export default function App() {
         <div className="flex items-center gap-2 px-3 py-1.5 bg-[#171717]/80 backdrop-blur-md rounded-full border border-white/5 shadow-md">
           <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]'}`} />
           <span className="text-xs font-medium text-gray-300">
-            {isConnected ? 'API Connected' : 'API Offline'}
+            {isConnected ? 'Connected' : 'Offline'}
           </span>
         </div>
       </div>
@@ -136,8 +136,8 @@ export default function App() {
         <div className="flex-1 overflow-y-auto px-4 pt-20 pb-32">
           {messages.length === 0 && !isPaused && !loading ? (
             <div className="h-full flex flex-col items-center justify-center">
-              <h1 className="text-2xl md:text-3xl font-medium text-gray-100 mb-8 tracking-tight">
-                Where should we begin?
+              <h1 className="text-2xl md:text-3xl font-medium text-gray-100 mb-8 tracking-tight text-center font-serif"style={{ fontFamily: '"SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace' }}>
+                📋 Logistics SLA Copilot active. How can I help you analyze contracts,<br /> verify compliance, or track SLA metrics today?
               </h1>
             </div>
           ) : (
