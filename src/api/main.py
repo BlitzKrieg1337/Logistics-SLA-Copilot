@@ -7,7 +7,7 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from typing import Any,List
 from langchain_core.runnables import RunnableConfig
 
-from src.agent.graph import graph, AgentState
+from src.agent.graph import graph, AgentState, memory
 from src.api.schemas import ChatRequest, ChatResponse, MessageSchma, ApproveRequest
 
 
@@ -154,27 +154,25 @@ def handle_approval(payload : ApproveRequest) -> ChatResponse:
             graph.invoke(None, config)
 
         elif payload.action.lower() == "reject":
-                    last_message = state.values["messages"][-1]
+                last_message = state.values["messages"][-1]
 
-                    if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail="No pending tool call to reject.",
-                        )
-
-                    tool_call_id = last_message.tool_calls[0]["id"]
-
-                    # FIX: Added a CRITICAL DIRECTIVE to stop the LLM from trying again
-                    rejection_message = ToolMessage(
-                        content=(
-                            f"User rejected the penalty application. Reason: {payload.reason or 'User manually declined in UI.'} "
-                            f"\nCRITICAL SYSTEM DIRECTIVE: DO NOT retry this tool call. Acknowledge the cancellation gracefully and ask the user what to do next."
-                        ),
-                        tool_call_id=tool_call_id,
+                if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="No pending tool call to reject.",
                     )
+                tool_call_id = last_message.tool_calls[0]["id"]
 
-                    graph.update_state(config, {"messages": [rejection_message]}, as_node="SENSITIVE_TOOLS")
-                    graph.invoke(None, config)
+                rejection_message = ToolMessage(
+                    content=(
+                        f"User rejected the penalty application. Reason: {payload.reason or 'User manually declined in UI.'} "
+                        f"\nCRITICAL SYSTEM DIRECTIVE: DO NOT retry this tool call. Acknowledge the cancellation gracefully and ask the user what to do next."
+                    ),
+                    tool_call_id=tool_call_id,
+                )
+
+                graph.update_state(config, {"messages": [rejection_message]}, as_node="SENSITIVE_TOOLS")
+                graph.invoke(None, config)
 
         else:
             raise HTTPException(
@@ -215,3 +213,15 @@ def get_history(thread_id : str) -> ChatResponse:
         is_paused = bool(state.next),
         pending_action = get_pending_action(state),
     )
+
+@app.post("/thread/{thread_id}/delete")
+def delete_thread(thread_id: str):
+    try:
+        memory.delete_thread(thread_id)
+        return {"status": "deleted", "thread_id": thread_id}
+    except Exception:
+        logger.exception("Failed to delete thread %s", thread_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not delete thread data.",
+        )

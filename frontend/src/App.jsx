@@ -6,6 +6,13 @@ import remarkGfm from 'remark-gfm';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
 
+const STATUS_CONFIG = {
+  checking: { dot: 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.5)]', text: 'Connecting…' },
+  waking:   { dot: 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.5)] animate-pulse', text: 'Waking up server…' },
+  online:   { dot: 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]', text: 'Connected' },
+  offline:  { dot: 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]', text: 'Offline' },
+};
+
 export default function App() {
   const [threadId, setThreadId] = useState('');
   const [messages, setMessages] = useState([]);
@@ -13,12 +20,12 @@ export default function App() {
   const [isPaused, setIsPaused] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
-  
+  const [connectionStatus, setConnectionStatus] = useState('checking');
+
   const chatEndRef = useRef(null);
   const textareaRef = useRef(null);
 
-  // Initialize Session & Check Backend Connection
+  // Initialize Session
   useEffect(() => {
     let currentThread = sessionStorage.getItem('thread_id');
     if (!currentThread) {
@@ -27,25 +34,74 @@ export default function App() {
     }
     setThreadId(currentThread);
     fetchHistory(currentThread);
+  }, []);
 
-    // Live connection polling
+  // Connection polling — fast while not confirmed online (to catch Render
+  // cold-start wake-ups quickly), slower once steady-state connected.
+  useEffect(() => {
+    let cancelled = false;
+    let failCount = 0;
+    let timeoutId;
+
     const checkConnection = async () => {
       try {
-        await axios.get(`${API_BASE}/test`);
-        setIsConnected(true);
+        await axios.get(`${API_BASE}/test`, { timeout: 8000 });
+        if (cancelled) return;
+        
+        failCount = 0;
+        setConnectionStatus('online');
+        // SUCCESS: We stop polling entirely. No more timeouts!
+        // This allows Render to sleep after 15 mins of inactivity.
+        
       } catch (error) {
-        if (error.response) setIsConnected(true);
-        else setIsConnected(false);
+        if (cancelled) return;
+        
+        failCount += 1;
+        setConnectionStatus(failCount >= 6 ? 'offline' : 'waking');
+        
+        // FAILURE: Keep polling every 5 seconds until it wakes up
+        timeoutId = setTimeout(checkConnection, 5000);
       }
     };
+
     checkConnection();
-    const interval = setInterval(checkConnection, 5000);
-    return () => clearInterval(interval);
+    
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
   }, []);
+
+  // Delete thread data when the tab closes
+  useEffect(() => {
+    const cleanup = () => {
+      if (!threadId) return;
+      navigator.sendBeacon(`${API_BASE}/thread/${threadId}/delete`);
+    };
+
+    window.addEventListener('pagehide', cleanup);
+    return () => window.removeEventListener('pagehide', cleanup);
+  }, [threadId]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isPaused, loading]);
+
+  const SUGGESTIONS = [
+    "Check for recent order delays",
+    "Analyze MSA with Siemens",
+    "Calculate late delivery penalties",
+    "Verify contract terms for Tata"
+  ];
+
+  const handleSuggestionClick = (text) => {
+    setInput(text);
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+      // Reset height to fit the new text
+      textareaRef.current.style.height = 'auto';
+    }
+  };
 
   const fetchHistory = async (id) => {
     try {
@@ -66,20 +122,21 @@ export default function App() {
 
   const sendMessage = async (e) => {
     if (e) e.preventDefault();
-    if (!input.trim() || isPaused || loading || !isConnected) return;
+    if (!input.trim() || isPaused || loading || connectionStatus !== 'online') return;
 
     const userMessage = input;
     setInput('');
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
-    
+
     setMessages((prev) => [...prev, { role: 'user', content: userMessage }]);
     setLoading(true);
 
     try {
-      const res = await axios.post(`${API_BASE}/chat`, {
-        thread_id: threadId,
-        messages: userMessage
-      });
+      const res = await axios.post(
+        `${API_BASE}/chat`,
+        { thread_id: threadId, messages: userMessage },
+        { timeout: 65000 } // headroom for a Render cold-start on the backend
+      );
       setMessages(res.data.messages || []);
       setIsPaused(res.data.is_paused || false);
       setPendingAction(res.data.pending_action || null);
@@ -103,11 +160,15 @@ export default function App() {
   const handleApproval = async (action) => {
     setLoading(true);
     try {
-      const res = await axios.post(`${API_BASE}/action`, {
-        thread_id: threadId,
-        action: action,
-        reason: action === 'reject' ? 'User rejected execution' : null
-      });
+      const res = await axios.post(
+        `${API_BASE}/action`,
+        {
+          thread_id: threadId,
+          action: action,
+          reason: action === 'reject' ? 'User rejected execution' : null
+        },
+        { timeout: 65000 }
+      );
       setMessages(res.data.messages || []);
       setIsPaused(res.data.is_paused || false);
       setPendingAction(res.data.pending_action || null);
@@ -118,15 +179,17 @@ export default function App() {
     }
   };
 
+  const isOnline = connectionStatus === 'online';
+
   return (
     <div className="flex h-screen bg-[#0a0a0a] text-gray-100 font-sans selection:bg-blue-500/30 overflow-hidden relative">
-      
+
       {/* Floating Status Capsule */}
       <div className="absolute top-5 left-5 z-50">
         <div className="flex items-center gap-2 px-3 py-1.5 bg-[#171717]/80 backdrop-blur-md rounded-full border border-white/5 shadow-md">
-          <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]'}`} />
+          <div className={`w-2 h-2 rounded-full ${STATUS_CONFIG[connectionStatus].dot}`} />
           <span className="text-xs font-medium text-gray-300">
-            {isConnected ? 'Connected' : 'Offline'}
+            {STATUS_CONFIG[connectionStatus].text}
           </span>
         </div>
       </div>
@@ -135,10 +198,33 @@ export default function App() {
       <main className="flex-1 flex flex-col relative min-w-0">
         <div className="flex-1 overflow-y-auto px-4 pt-20 pb-32">
           {messages.length === 0 && !isPaused && !loading ? (
-            <div className="h-full flex flex-col items-center justify-center">
-              <h1 className="text-2xl md:text-3xl font-medium text-gray-100 mb-8 tracking-tight text-center font-serif"style={{ fontFamily: '"SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace' }}>
+            <div className="h-full flex flex-col items-center justify-center max-w-4xl mx-auto w-full px-4">
+              <h1 className="text-2xl md:text-3xl font-medium text-gray-100 mb-8 tracking-tight text-center font-serif" style={{ fontFamily: '"SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace' }}>
                 📋 Logistics SLA Copilot active. How can I help you analyze contracts,<br /> verify compliance, or track SLA metrics today?
               </h1>
+              
+              {/* Suggestion Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-2xl mt-4">
+                {SUGGESTIONS.map((text, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handleSuggestionClick(text)}
+                    disabled={!isOnline}
+                    className="text-left p-4 rounded-xl border border-white/10 bg-[#1a1a1a]/60 hover:bg-[#2f2f2f] transition-all hover:border-white/20 disabled:opacity-50 disabled:cursor-not-allowed group flex justify-between items-center shadow-sm"
+                  >
+                    <span className="text-sm text-gray-300 group-hover:text-white transition-colors">
+                      {text}
+                    </span>
+                    <svg 
+                      className="w-4 h-4 text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity transform group-hover:translate-x-1" 
+                      viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                    >
+                      <line x1="5" y1="12" x2="19" y2="12"></line>
+                      <polyline points="12 5 19 12 12 19"></polyline>
+                    </svg>
+                  </button>
+                ))}
+              </div>
             </div>
           ) : (
             <div className="max-w-3xl mx-auto space-y-6 mt-6">
@@ -147,14 +233,14 @@ export default function App() {
                 return (
                   <div key={idx} className={`flex w-full ${isUser ? 'justify-end' : 'justify-start'}`}>
                     <div className={`text-[15px] leading-relaxed max-w-[85%] md:max-w-[75%] ${
-                      isUser 
+                      isUser
                         ? 'bg-[#2f2f2f] text-white px-5 py-3 rounded-3xl'
                         : 'text-gray-200 px-2 py-3'
                     }`}>
                       {isUser ? (
                         <div className="whitespace-pre-wrap">{msg.content}</div>
                       ) : (
-                        <ReactMarkdown 
+                        <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           components={{
                             table: ({node, ...props}) => (
@@ -196,7 +282,7 @@ export default function App() {
                     <div className="h-2 w-2 rounded-full bg-orange-500 animate-pulse" />
                     <h3 className="text-gray-100 font-medium text-sm">Action Approval Required</h3>
                   </div>
-                  
+
                   <div className="flex flex-col sm:flex-row gap-3">
                     <button
                       onClick={() => handleApproval('approve')}
@@ -223,8 +309,8 @@ export default function App() {
         {/* Input Area */}
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a] to-transparent pt-6 pb-6 px-4">
           <div className="max-w-3xl mx-auto">
-            <form 
-              onSubmit={sendMessage} 
+            <form
+              onSubmit={sendMessage}
               style={{ outline: 'none', boxShadow: 'none' }}
               className="bg-[#2f2f2f] rounded-[24px] flex items-end p-2 transition-colors"
             >
@@ -233,15 +319,19 @@ export default function App() {
                 value={input}
                 onChange={handleInput}
                 onKeyDown={handleKeyDown}
-                disabled={isPaused || loading || !isConnected}
-                placeholder={isPaused ? "Approve or reject above..." : "Ask anything"}
+                disabled={isPaused || loading || !isOnline}
+                placeholder={
+                  !isOnline
+                    ? 'Waking up the server — this can take up to a minute…'
+                    : (isPaused ? 'Approve or reject above...' : 'Ask anything')
+                }
                 rows={1}
                 style={{ outline: 'none', boxShadow: 'none', border: 'none', WebkitTapHighlightColor: 'transparent' }}
                 className="flex-1 max-h-[200px] bg-transparent resize-none py-2.5 px-4 text-[15px] text-gray-100 placeholder-gray-400 disabled:opacity-50 focus:outline-none focus:ring-0 focus:border-transparent"
               />
               <button
                 type="submit"
-                disabled={isPaused || loading || !input.trim() || !isConnected}
+                disabled={isPaused || loading || !input.trim() || !isOnline}
                 className="p-2 mb-1 mr-1 bg-white hover:bg-gray-200 disabled:bg-[#424242] disabled:text-gray-500 text-black rounded-full transition-colors flex-shrink-0"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
