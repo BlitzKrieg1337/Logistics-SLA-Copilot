@@ -135,7 +135,7 @@ export default function App() {
       const res = await axios.post(
         `${API_BASE}/chat`,
         { thread_id: threadId, messages: userMessage },
-        { timeout: 65000 } // headroom for a Render cold-start on the backend
+        { timeout: 300000 } // headroom for a Render cold-start on the backend
       );
       setMessages(res.data.messages || []);
       setIsPaused(res.data.is_paused || false);
@@ -167,7 +167,7 @@ export default function App() {
           action: action,
           reason: action === 'reject' ? 'User rejected execution' : null
         },
-        { timeout: 65000 }
+        { timeout: 300000 }
       );
       setMessages(res.data.messages || []);
       setIsPaused(res.data.is_paused || false);
