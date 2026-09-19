@@ -50,7 +50,7 @@ def format_messages(raw_messages: List[Any]) -> List[MessageSchma]:
             # Inject the Markdown Table summary
             if hasattr(msg, "tool_calls") and msg.tool_calls:
                 for tc in msg.tool_calls:
-                    if tc["name"] == "post_penalty_to_ledger":
+                    if tc["name"] == "update_order_penalty":
                         args = tc.get("args", {})
                         
                         try:
@@ -60,10 +60,10 @@ def format_messages(raw_messages: List[Any]) -> List[MessageSchma]:
                             
                         summary = (
                             f"\n\n---\n"
-                            f"### 🛑 Ledger Update Request\n"
+                            f"### 🛑 DATABASE Update Request\n"
                             f"| Field | Details |\n"
                             f"| :--- | :--- |\n"
-                            f"| **Action** | Post Penalty to Database Ledger |\n"
+                            f"| **Action** | Post Penalty to Database |\n"
                             f"| **Order ID** | `{args.get('order_id', 'Unknown')}` |\n"
                             f"| **Vendor** | {args.get('vendor_name', 'Unknown')} |\n"
                             f"| **Expected Date** | {args.get('expected_date', 'Unknown')} |\n"
@@ -73,7 +73,7 @@ def format_messages(raw_messages: List[Any]) -> List[MessageSchma]:
                             f"---\n"
                         )
                         
-                        if "Ledger Update Request" not in content:
+                        if "DATABASE Update Request" not in content:
                             content += summary
                             
             if content.strip():
@@ -83,9 +83,17 @@ def format_messages(raw_messages: List[Any]) -> List[MessageSchma]:
             content = str(msg.content)
             
             if "User rejected" in content:
-                formatted.append(MessageSchma(role="user", content="Action: **Rejected** ❌"))
-            elif "Success: Order" in content or "Error:" in content:
-                formatted.append(MessageSchma(role="user", content="Action: **Approved** ✅"))
+                formatted.append(
+                    MessageSchma(role="user", content="Action: **Rejected** ❌")
+                )
+            elif "Success: Order" in content:
+                formatted.append(
+                    MessageSchma(role="user", content="Action: **Approved** ✅")
+                )
+            elif "Error:" in content:
+                formatted.append(
+                    MessageSchma(role="user", content="Action: **Failed** ⚠️")
+                )
                 
     return formatted
 
@@ -105,8 +113,7 @@ def get_pending_action(state: Any) -> Any:
 
 @app.get("/test")
 def testing():
-    if graph:
-        return "SUCCESS!"
+    return "SUCCESS!"
 
 
 @app.post("/chat")

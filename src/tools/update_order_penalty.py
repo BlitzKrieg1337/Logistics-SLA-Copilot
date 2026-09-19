@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 @tool
-def post_penalty_to_ledger(
+def update_order_penalty(
     order_id: int, 
     penalty_applied_inr: float,
     vendor_name: str,
@@ -62,4 +62,4 @@ def post_penalty_to_ledger(
             conn.close()
 
 if __name__ == "__main__":
-    print(post_penalty_to_ledger.invoke({"order_id": 1, "penalty_applied_inr": 6000.0}))
+    print(update_order_penalty.invoke({"order_id": 1, "penalty_applied_inr": 6000.0}))

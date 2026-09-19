@@ -117,7 +117,7 @@ def tool_policy_evaluator(run, example) -> dict:
 
 
 def interrupt_evaluator(run, example) -> dict:
-    """Requires a ledger write to remain pending rather than being executed."""
+    """Requires a database write to remain pending rather than being executed."""
     expected = example.outputs
     if not expected.get("requires_interrupt"):
         return {"key": "human_approval_pause", "score": 1.0}

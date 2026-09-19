@@ -3,7 +3,7 @@
 🚀 **Live App:** [logistics-sla-copilot.vercel.app](https://logistics-sla-copilot.vercel.app)  
 ⚡ **API Health:** [logistics-sla-copilot.onrender.com/test](https://logistics-sla-copilot.onrender.com/test)
 
-An AI-assisted operations copilot for investigating delivery delays, retrieving vendor SLA terms, calculating late-delivery penalties, researching possible Force Majeure events, and requesting human approval before a penalty is written to the ledger.
+An AI-assisted operations copilot for investigating delivery delays, retrieving vendor SLA terms, calculating late-delivery penalties, researching possible Force Majeure events, and requesting human approval before a penalty is written to the database.
 
 Built as a portfolio project to demonstrate agent orchestration, retrieval-augmented generation (RAG), database RBAC, and human-in-the-loop controls.
 
@@ -13,7 +13,7 @@ Built as a portfolio project to demonstrate agent orchestration, retrieval-augme
 - Retrieve vendor-specific SLA clauses from Pinecone-hosted contract documents.
 - Calculate billable delay days from contract grace periods and convert penalties to INR using live FX data.
 - Search recent disruption news to provide Force Majeure context for a human decision.
-- Pause before a ledger update so a user can explicitly approve or reject it.
+- Pause before a database update so a user can explicitly approve or reject it.
 
 ## Architecture
 
@@ -29,7 +29,7 @@ SQL     RAG     FX API   News API
 Postgres Pinecone Frankfurter Tavily
 ```
 
-The LangGraph workflow separates ordinary analytical tools from the ledger-writing tool. It interrupts before `post_penalty_to_ledger` executes, and the frontend displays an approval card with Approve and Reject actions.
+The LangGraph workflow separates ordinary analytical tools from the databse-writing tool. It interrupts before `update_order_penalty` executes, and the frontend displays an approval card with Approve and Reject actions.
 
 ## Tech stack
 
@@ -42,11 +42,11 @@ The LangGraph workflow separates ordinary analytical tools from the ledger-writi
 
 ## Security and safety controls
 
-- **Read/write separation:** analytics uses `READONLY_DATABASE_URL`; ledger updates use `UPDATEONLY_DATABASE_URL`.
+- **Read/write separation:** analytics uses `READONLY_DATABASE_URL`; database updates use `UPDATEONLY_DATABASE_URL`.
 - **Database RBAC:** `verify_rbac.py` validates that the read-only role cannot update records.
 - **Read-only SQL tool:** only `SELECT` and `WITH ... SELECT` statements are accepted by the analytics tool.
-- **Human approval:** a ledger update is interrupted before execution and requires a UI decision.
-- **Guardrails:** hypothetical writes, batch ledger updates, destructive SQL, and unverified penalties are refused or escalated.
+- **Human approval:** a database update is interrupted before execution and requires a UI decision.
+- **Guardrails:** hypothetical writes, batch database updates, destructive SQL, and unverified penalties are refused or escalated.
 
 ## Local setup
 
@@ -135,7 +135,7 @@ Open the local Vite URL shown in the terminal, normally `http://localhost:5173`.
 | --- | --- | --- |
 | `GET` | `/test` | Health check |
 | `POST` | `/chat` | Send a message for a conversation thread |
-| `POST` | `/action` | Approve or reject a pending ledger action |
+| `POST` | `/action` | Approve or reject a pending database entry action |
 | `GET` | `/history/{thread_id}` | Restore conversation history and pending approval state |
 
 ## Evaluation
@@ -147,7 +147,7 @@ uv run python evals/create_eval_dataset.py
 uv run python evals/run_eval.py
 ```
 
-It covers normal SQL retrieval, contract grounding, multi-tool investigation, destructive SQL refusal, hypothetical and batch write refusal, missing-order handling, Force Majeure escalation, and the ledger approval boundary.
+It covers normal SQL retrieval, contract grounding, multi-tool investigation, destructive SQL refusal, hypothetical and batch write refusal, missing-order handling, Force Majeure escalation, and the database update approval boundary.
 
 ## Deployment checklist
 

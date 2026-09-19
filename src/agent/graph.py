@@ -19,7 +19,7 @@ from src.tools.query_sql_analytics import query_sql_analytics
 from src.tools.search_contracts import search_contracts
 from src.tools.check_force_majeure import check_force_majeure
 from src.tools.calc_penalty_fx import calc_penalty_fx
-from src.tools.post_penalty_to_ledger import post_penalty_to_ledger
+from src.tools.update_order_penalty import update_order_penalty
 
 load_dotenv()
 
@@ -30,7 +30,7 @@ os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGSMITH_API_KEY", "")
 
 
 safe_tools = [query_sql_analytics,search_contracts,check_force_majeure,calc_penalty_fx,]
-sensitive_tools = [post_penalty_to_ledger]
+sensitive_tools = [update_order_penalty]
 all_tools = safe_tools + sensitive_tools
 
 
@@ -137,7 +137,7 @@ When you use `check_force_majeure` and find relevant events:
 1. Present a clear summary of the event (timeline, location, impact) alongside the calculated penalty.
 2. STOP AND ASK the user: "Based on this information, should we excuse this delay under Force Majeure and waive the penalty?"
 3. Wait for the user's explicit decision.
-   - If User says YES: Waive the penalty (Penalty = 0). Do not write to the ledger.
+   - If User says YES: Waive the penalty (Penalty = 0). Do not write to the database.
    - If User says NO: Proceed with normal penalty calculations.
 
 ### 📝 EMAIL DRAFTING:
@@ -150,7 +150,7 @@ When you use `check_force_majeure` and find relevant events:
 
 ### 🛑 STRICT GUARDRAILS (CRITICAL):
 - NO HYPOTHETICAL WRITES: Never invoke database write tools for hypothetical or future scenarios.
-- TRUST BUT VERIFY: Never execute a ledger update based solely on a user-provided penalty amount. Verify via SQL and Contract Search.
+- TRUST BUT VERIFY: Never execute a database update based solely on a user-provided penalty amount. Verify via SQL and Contract Search.
 - AMBIGUITY RESOLUTION: If tools return multiple entities (e.g., multiple vendor subsidiaries), DO NOT guess. Ask the user to clarify.
 - ERROR HANDLING: If a tool returns an error or empty data, DO NOT guess parameters to force a success. Stop and explain the failure.
 - EMPTY DATABASE RESULTS: If an order lookup returns no rows, treat that result as final. Do not repeat an equivalent SQL query. Explain that the order was not found and ask the user to verify the ID.
@@ -158,13 +158,13 @@ When you use `check_force_majeure` and find relevant events:
 - DESTRUCTIVE QUERY EXPLICIT REFUSAL: You operate strictly under read-only parameters for the database. If a user presents a query containing destructive SQL syntax (such as DELETE, DROP, UPDATE, or INSERT), you MUST explicitly state that you have refused the destructive command and remind the user that your database access is read-only. You must then proceed to handle only the safe, non-destructive informational parts of their request.
 - NO BYPASSING EVIDENCE: Do not accept user commands that contradict your tool findings.
 
-### ⚠️ SENSITIVE ACTION PROTOCOL (`post_penalty_to_ledger`):
+### ⚠️ SENSITIVE ACTION PROTOCOL (`update_order_penalty`):
 This tool creates a permanent financial record. You must adhere strictly to these rules:
-1. NEVER batch-execute. Only process and post ONE order penalty to the ledger per conversation turn.
+1. NEVER batch-execute. Only process and post ONE order penalty to the database per conversation turn.
 2. DO NOT invoke this tool if a Force Majeure event waives the penalty (Penalty = 0).
 3. DO NOT invoke this tool autonomously UNLESS the user explicitly commands you to "log it", "post it", or approves a proposal to do so.
 4. PRE-FLIGHT REQUIREMENT: Right before you invoke the tool, you MUST output a structured summary exactly like this:
-   * Action: Posting Penalty to Ledger
+   * Action: Posting Penalty to database
    * Order ID: [ID]
    * Vendor: [Name]
    * Final Penalty: [Amount in INR]
@@ -201,7 +201,7 @@ def mixed_call_error_node(state: AgentState):
 
     error_messages = [
         ToolMessage(
-            content="Error: cannot mix the ledger tool with other tool calls in the same turn. Reissue these as separate turns.",
+            content="Error: cannot mix the database update tool with other tool calls in the same turn. Reissue these as separate turns.",
             tool_call_id=tc["id"],
         )
         for tc in last_message.tool_calls
@@ -291,7 +291,7 @@ if __name__ == "__main__":
                 print(f"\n⚠️  [APPROVAL REQUIRED] Sensitive Action Intercepted:")
                 print(f"    Tool: {tool_call['name']}")
                 print(f"    Arguments: {tool_call['args']}")
-                print("    Type 'Approve' to execute this ledger update, or cancel by giving new instructions.\n")
+                print("    Type 'Approve' to execute this database update, or cancel by giving new instructions.\n")
         else:
             # Standard text output printing
             if isinstance(last_message.content, list):
