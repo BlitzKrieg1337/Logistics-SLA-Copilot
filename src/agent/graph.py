@@ -14,7 +14,6 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.postgres import PostgresSaver
 from psycopg_pool import ConnectionPool
 
-# Importing tools
 from src.tools.query_sql_analytics import query_sql_analytics
 from src.tools.search_contracts import search_contracts
 from src.tools.check_force_majeure import check_force_majeure
@@ -270,21 +269,17 @@ if __name__ == "__main__":
         if not user_input:
             continue
 
-        # Check if graph is currently interrupted waiting for approval
         snapshot = builder.compile(checkpointer=memory, interrupt_before=["SENSITIVE_TOOLS"]).get_state(config)
         
         if snapshot.next and "SENSITIVE_TOOLS" in snapshot.next:
-            # User is responding to an approval prompt
             response = graph.invoke(None, config=config)
         else:
             # Standard new message
             response = graph.invoke({"messages": [HumanMessage(content=user_input)]}, config=config)
 
-        # Inspect state after invocation
         current_state = graph.get_state(config)
         last_message = response["messages"][-1]
 
-        # If graph paused BEFORE sensitive tools, print approval prompt with tool details
         if current_state.next and "SENSITIVE_TOOLS" in current_state.next:
             if hasattr(last_message, "tool_calls") and last_message.tool_calls:
                 tool_call = last_message.tool_calls[0]
@@ -293,7 +288,6 @@ if __name__ == "__main__":
                 print(f"    Arguments: {tool_call['args']}")
                 print("    Type 'Approve' to execute this database update, or cancel by giving new instructions.\n")
         else:
-            # Standard text output printing
             if isinstance(last_message.content, list):
                 clean_text = next((b["text"] for b in last_message.content if b.get("type") == "text"), "")
                 print(f"\nCopilot Response:\n{clean_text}\n" + "-"*50)
