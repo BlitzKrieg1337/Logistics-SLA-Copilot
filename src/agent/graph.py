@@ -63,8 +63,20 @@ gemini_llm6 = ChatGoogleGenerativeAI(
     api_key=SecretStr(os.environ.get("GEMINI_API_KEY", "")),
 )
 
-groq_llm = ChatOpenAI(
+groq_llm1 = ChatOpenAI(
     model = "openai/gpt-oss-120b",
+    api_key=SecretStr(os.environ.get("GROQ_API_KEY", "")),
+    base_url = "https://api.groq.com/openai/v1"
+)
+
+groq_llm2 = ChatOpenAI(
+    model = "qwen/qwen3.8-27b",
+    api_key=SecretStr(os.environ.get("GROQ_API_KEY", "")),
+    base_url = "https://api.groq.com/openai/v1"
+)
+
+groq_llm3 = ChatOpenAI(
+    model = "minimax-m2.7",
     api_key=SecretStr(os.environ.get("GROQ_API_KEY", "")),
     base_url = "https://api.groq.com/openai/v1"
 )
@@ -82,17 +94,22 @@ gemini4_with_tools = gemini_llm4.bind_tools(all_tools)
 gemini5_with_tools = gemini_llm5.bind_tools(all_tools)
 gemini6_with_tools = gemini_llm6.bind_tools(all_tools)
 
-groq_with_tools = groq_llm.bind_tools(all_tools)
+groq1_with_tools = groq_llm1.bind_tools(all_tools)
+groq2_with_tools = groq_llm2.bind_tools(all_tools)
+groq3_with_tools = groq_llm3.bind_tools(all_tools)
+
 openrouter_with_tools = openrouter_llm.bind_tools(all_tools)
 
-llm_with_tools = openrouter_with_tools.with_fallbacks(
-    [groq_with_tools, 
-     gemini1_with_tools,
+llm_with_tools = groq1_with_tools.with_fallbacks(
+    [groq2_with_tools,
+     groq3_with_tools,
+     gemini5_with_tools,
      gemini2_with_tools,
      gemini3_with_tools,
      gemini4_with_tools,
-     gemini5_with_tools,
+     gemini1_with_tools,
      gemini6_with_tools,
+     openrouter_with_tools
      ])
 
 
