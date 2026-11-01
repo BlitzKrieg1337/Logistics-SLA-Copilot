@@ -22,14 +22,14 @@ Built as a portfolio project to demonstrate agent orchestration, retrieval-augme
             |
          FastAPI API
             |
-      LangGraph agent
+       LangGraph agent
   |       |       |       |
 SQL     RAG     FX API   News API
   |       |       |       |
 Postgres Pinecone Frankfurter Tavily
 ```
 
-The LangGraph workflow separates ordinary analytical tools from the databse-writing tool. It interrupts before `update_order_penalty` executes, and the frontend displays an approval card with Approve and Reject actions.
+The LangGraph workflow separates ordinary analytical tools from the database-writing tool. It interrupts before `update_order_penalty` executes, and the frontend displays an approval card with Approve and Reject actions.
 
 ## Tech stack
 
@@ -137,6 +137,7 @@ Open the local Vite URL shown in the terminal, normally `http://localhost:5173`.
 | `POST` | `/chat` | Send a message for a conversation thread |
 | `POST` | `/action` | Approve or reject a pending database entry action |
 | `GET` | `/history/{thread_id}` | Restore conversation history and pending approval state |
+| `POST` | `/thread/{thread_id}/delete` | Delete thread state and checkpoint data on session end |
 
 ## Evaluation
 
