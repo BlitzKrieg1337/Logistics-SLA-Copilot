@@ -8,12 +8,12 @@ from pinecone import Pinecone
 
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "true"
 
-BASE_DIR =  Path(__file__).resolve().parent.parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 MSA_DIR = Path(BASE_DIR) / "data" / "contracts"
 INDEX_NAME = "llama-text-embed-v2-index"
 NAMESPACE = "contracts"
 
-def build_vector_databses():
+def build_vector_databases():
     load_dotenv(BASE_DIR / ".env")
     api_key = os.getenv("PINECONE_API_KEY")
 
@@ -33,22 +33,22 @@ def build_vector_databses():
 
     for file in MSA_DIR.glob('*.md'):
         print(f"Processing contract: {file.name}")
-        raw_text = file.read_text(encoding = 'utf-8')
+        raw_text = file.read_text(encoding='utf-8')
         vendor = file.stem.split('_')[0]
 
         doc = Document(
-            page_content = raw_text,
-            metadata = {
-                "source" : file.name,
-                "vendor" : vendor
+            page_content=raw_text,
+            metadata={
+                "source": file.name,
+                "vendor": vendor
             }
         )
         all_documents.append(doc)
 
     # Using RecursiveCharacterTextSplitter to split the text with overlaps
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size = 500,
-        chunk_overlap = 50,
+        chunk_size=500,
+        chunk_overlap=50,
     )
 
     # Chunking
@@ -70,6 +70,13 @@ def build_vector_databses():
             "vendor": chunk.metadata["vendor"],
         })
 
+    # Purge stale chunks to prevent outdated data
+    print(f"Purging existing chunks from namespace '{NAMESPACE}'...")
+    try:
+        index.delete(namespace=NAMESPACE, delete_all=True)
+    except Exception as e:
+        print(f"Note: Namespace purge skipped/noted: {e}")
+
     # 96 is Pinecone's batch limit for indexes with integrated embeddings.
     for start in range(0, len(records), 96):
         index.upsert_records(
@@ -80,5 +87,9 @@ def build_vector_databses():
     print(f"Uploaded {len(records)} chunks to Pinecone index '{INDEX_NAME}'.")
 
 
+# Backward-compatible alias for previous function name typo
+build_vector_databses = build_vector_databases
+
+
 if __name__ == '__main__':
-    build_vector_databses()
+    build_vector_databases()
