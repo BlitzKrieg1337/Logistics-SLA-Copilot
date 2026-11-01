@@ -4,14 +4,14 @@ import logging
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
-from typing import Any,List
+from typing import Any, List
 from langchain_core.runnables import RunnableConfig
 
 from src.agent.graph import graph, AgentState, memory
-from src.api.schemas import ChatRequest, ChatResponse, MessageSchma, ApproveRequest
+from src.api.schemas import ChatRequest, ChatResponse, MessageSchema, ApproveRequest
 
 
-app = FastAPI(title = "Logistics SLA Copilot API")
+app = FastAPI(title="Logistics SLA Copilot API")
 logger = logging.getLogger(__name__)
 
 raw_origins = os.environ.get(
@@ -22,14 +22,14 @@ origins = [o.strip().rstrip("/") for o in raw_origins if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins= origins,
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-def format_messages(raw_messages: List[Any]) -> List[MessageSchma]:
+def format_messages(raw_messages: List[Any]) -> List[MessageSchema]:
     formatted = []
     for msg in raw_messages:
         if isinstance(msg, HumanMessage):
@@ -38,10 +38,10 @@ def format_messages(raw_messages: List[Any]) -> List[MessageSchma]:
                 content = "".join(b.get("text", "") if isinstance(b, dict) else str(b) for b in msg.content)
             else:
                 content = str(msg.content) if msg.content else ""
-            formatted.append(MessageSchma(role="user", content=content))
+            formatted.append(MessageSchema(role="user", content=content))
             
         elif isinstance(msg, AIMessage):
-            # FIX: Safely parse text out of content blocks if it's a list
+            # Safely parse text out of content blocks if it's a list
             if isinstance(msg.content, list):
                 content = "".join(b.get("text", "") if isinstance(b, dict) else str(b) for b in msg.content)
             else:
@@ -77,22 +77,22 @@ def format_messages(raw_messages: List[Any]) -> List[MessageSchma]:
                             content += summary
                             
             if content.strip():
-                formatted.append(MessageSchma(role="assistant", content=content.strip()))
+                formatted.append(MessageSchema(role="assistant", content=content.strip()))
                 
         elif isinstance(msg, ToolMessage):
             content = str(msg.content)
             
             if "User rejected" in content:
                 formatted.append(
-                    MessageSchma(role="user", content="Action: **Rejected** ❌")
+                    MessageSchema(role="user", content="Action: **Rejected** ❌")
                 )
             elif "Success: Order" in content:
                 formatted.append(
-                    MessageSchma(role="user", content="Action: **Approved** ✅")
+                    MessageSchema(role="user", content="Action: **Approved** ✅")
                 )
             elif "Error:" in content:
                 formatted.append(
-                    MessageSchma(role="user", content="Action: **Failed** ⚠️")
+                    MessageSchema(role="user", content="Action: **Failed** ⚠️")
                 )
                 
     return formatted
@@ -118,8 +118,9 @@ def testing():
 
 @app.post("/chat")
 def chat_endpoint(payload: ChatRequest) -> ChatResponse:
-    config : RunnableConfig = {"configurable" : {"thread_id" : payload.thread_id}}
-    input_data : AgentState = {"messages": [HumanMessage(content=payload.messages)]}
+    config: RunnableConfig = {"configurable": {"thread_id": payload.thread_id}}
+    user_content = payload.message or payload.messages or ""
+    input_data: AgentState = {"messages": [HumanMessage(content=user_content)]}
 
     try:
         graph.invoke(input_data, config)
@@ -131,10 +132,10 @@ def chat_endpoint(payload: ChatRequest) -> ChatResponse:
         formatted_history = format_messages(state.values.get("messages", []))
 
         return ChatResponse(
-            thread_id = payload.thread_id,
-            messages = formatted_history,
-            is_paused = is_paused,
-            pending_action = pending_action, 
+            thread_id=payload.thread_id,
+            messages=formatted_history,
+            is_paused=is_paused,
+            pending_action=pending_action, 
         )
 
     except Exception:
@@ -145,9 +146,9 @@ def chat_endpoint(payload: ChatRequest) -> ChatResponse:
         )
 
 @app.post("/action")
-def handle_approval(payload : ApproveRequest) -> ChatResponse:
+def handle_approval(payload: ApproveRequest) -> ChatResponse:
 
-    config : RunnableConfig = {"configurable" : {"thread_id" : payload.thread_id}}
+    config: RunnableConfig = {"configurable": {"thread_id": payload.thread_id}}
     state = graph.get_state(config)
 
     if not state.next:
@@ -161,25 +162,25 @@ def handle_approval(payload : ApproveRequest) -> ChatResponse:
             graph.invoke(None, config)
 
         elif payload.action.lower() == "reject":
-                last_message = state.values["messages"][-1]
+            last_message = state.values["messages"][-1]
 
-                if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="No pending tool call to reject.",
-                    )
-                tool_call_id = last_message.tool_calls[0]["id"]
-
-                rejection_message = ToolMessage(
-                    content=(
-                        f"User rejected the penalty application. Reason: {payload.reason or 'User manually declined in UI.'} "
-                        f"\nCRITICAL SYSTEM DIRECTIVE: DO NOT retry this tool call. Acknowledge the cancellation gracefully and ask the user what to do next."
-                    ),
-                    tool_call_id=tool_call_id,
+            if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="No pending tool call to reject.",
                 )
+            tool_call_id = last_message.tool_calls[0]["id"]
 
-                graph.update_state(config, {"messages": [rejection_message]}, as_node="SENSITIVE_TOOLS")
-                graph.invoke(None, config)
+            rejection_message = ToolMessage(
+                content=(
+                    f"User rejected the penalty application. Reason: {payload.reason or 'User manually declined in UI.'} "
+                    f"\nCRITICAL SYSTEM DIRECTIVE: DO NOT retry this tool call. Acknowledge the cancellation gracefully and ask the user what to do next."
+                ),
+                tool_call_id=tool_call_id,
+            )
+
+            graph.update_state(config, {"messages": [rejection_message]}, as_node="SENSITIVE_TOOLS")
+            graph.invoke(None, config)
 
         else:
             raise HTTPException(
@@ -191,12 +192,14 @@ def handle_approval(payload : ApproveRequest) -> ChatResponse:
         formatted_history = format_messages(updated_state.values.get("messages", []))
 
         return ChatResponse(
-            thread_id = payload.thread_id,
-            messages = formatted_history,
-            is_paused = bool(updated_state.next),
-            pending_action = None
+            thread_id=payload.thread_id,
+            messages=formatted_history,
+            is_paused=bool(updated_state.next),
+            pending_action=None
         )
 
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("Agent execution failed in /action")
         raise HTTPException(
@@ -205,20 +208,20 @@ def handle_approval(payload : ApproveRequest) -> ChatResponse:
         )
 
 @app.get("/history/{thread_id}")
-def get_history(thread_id : str) -> ChatResponse:
+def get_history(thread_id: str) -> ChatResponse:
 
-    config :RunnableConfig = {"configurable" : {"thread_id" : thread_id}}
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
     state = graph.get_state(config)
 
     if not state.values:
-        return ChatResponse(thread_id = thread_id, messages = [], is_paused = False)
+        return ChatResponse(thread_id=thread_id, messages=[], is_paused=False)
 
     formatted_history = format_messages(state.values.get("messages", []))
     return ChatResponse(
-        thread_id = thread_id,
-        messages = formatted_history,
-        is_paused = bool(state.next),
-        pending_action = get_pending_action(state),
+        thread_id=thread_id,
+        messages=formatted_history,
+        is_paused=bool(state.next),
+        pending_action=get_pending_action(state),
     )
 
 @app.post("/thread/{thread_id}/delete")
