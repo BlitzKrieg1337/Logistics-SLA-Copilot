@@ -11,19 +11,19 @@ load_dotenv(BASE_DIR / ".env")
 tavily_client = TavilyClient(os.environ.get("TAVILY_API_KEY"))
 
 @tool
-def check_force_majeure(search_query: str) -> str:
+def check_force_majeure(search_query: str, days: int = 30) -> str:
     """
     Search for major external events that may have materially disrupted
     a vendor's ability to perform its contractual obligations.
 
-    
-    Args: search_query
-    The search query should be a complete, intent-driven question that
-    contains:
-    - the relevant location or supply-chain region
-    - the potential disruption
-    - the affected logistics/operations
-    - the relevant time period, when known
+    Args:
+        search_query: The search query should be a complete, intent-driven question that
+            contains:
+            - the relevant location or supply-chain region
+            - the potential disruption
+            - the affected logistics/operations
+            - the relevant time period, when known
+        days: Number of past days to search for news events (defaults to 30 days).
 
     Example:
     "Have there been any major events in or around Germany that materially
@@ -38,7 +38,6 @@ def check_force_majeure(search_query: str) -> str:
     the vendor's inability to perform. Ignore routine weather, minor
     disruptions, and short-lived local incidents.
 
-                      
     Query Formulation Guidelines for LLM:
         - Target ONLY major, catastrophic macro-events: war/conflict, floods, droughts, 
           wildfires, earthquakes, or total port/rail infrastructure shutdowns.
@@ -53,10 +52,10 @@ def check_force_majeure(search_query: str) -> str:
 
     try:
         response = tavily_client.search(
-            query = search_query,
-            topic = "news",
-            days=14,
-            max_results = 3
+            query=search_query,
+            topic="news",
+            days=days,
+            max_results=3
         )
         if not response.get("results"):
             return f"No relevant Force Majeure or disruption news found."
@@ -76,5 +75,5 @@ def check_force_majeure(search_query: str) -> str:
 if __name__ == "__main__":
     # Test
     print(
-        check_force_majeure.invoke({"search_query" : "Germany supply chain strikes port disruptions"})
+        check_force_majeure.invoke({"search_query": "Germany supply chain strikes port disruptions"})
     )

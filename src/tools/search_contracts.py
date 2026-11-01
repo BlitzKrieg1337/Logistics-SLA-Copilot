@@ -30,10 +30,12 @@ def search_contracts(query: str, vendor_name: str) -> str:
     """
 
     try:
+        normalized_vendor = vendor_name.strip().title() if vendor_name else ""
         search_query = SearchQuery(
-        inputs={"text": query},
-        top_k=4,
-        filter={"vendor": vendor_name})
+            inputs={"text": query},
+            top_k=4,
+            filter={"vendor": normalized_vendor}
+        )
 
         results = index.search(
             namespace=NAMESPACE,
@@ -43,7 +45,7 @@ def search_contracts(query: str, vendor_name: str) -> str:
         hits = results.result.hits
 
         if not hits:
-            return f"No SLA or contract documentation found for vendor: {vendor_name}"
+            return f"No SLA or contract documentation found for vendor: {normalized_vendor or vendor_name}"
 
         context = []
 

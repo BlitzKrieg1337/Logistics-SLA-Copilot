@@ -62,4 +62,11 @@ def update_order_penalty(
             conn.close()
 
 if __name__ == "__main__":
-    print(update_order_penalty.invoke({"order_id": 1, "penalty_applied_inr": 6000.0}))
+    print(update_order_penalty.invoke({
+        "order_id": 1,
+        "penalty_applied_inr": 6000.0,
+        "vendor_name": "Tata",
+        "expected_date": "2026-09-10",
+        "actual_date": "2026-09-15",
+        "delay_days": 5
+    }))
